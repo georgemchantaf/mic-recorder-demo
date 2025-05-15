@@ -1,56 +1,92 @@
-import { useState, useRef } from 'react';
+import { useRef, useState } from "react";
+import * as wavEncoder from "wav-encoder";
 
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
-  const [audioURL, setAudioURL] = useState(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const audioContextRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const processorRef = useRef(null);
+  const buffersRef = useRef([]);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      audioChunksRef.current = [];
+      mediaStreamRef.current = stream;
 
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+
+      const sourceNode = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = sourceNode;
+
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      buffersRef.current = [];
+
+      processor.onaudioprocess = (e) => {
+        const input = e.inputBuffer.getChannelData(0);
+        buffersRef.current.push(new Float32Array(input));
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        setAudioURL(url);
-      };
+      sourceNode.connect(processor);
+      processor.connect(audioContext.destination);
+      processorRef.current = processor;
 
-      mediaRecorderRef.current.start();
       setIsRecording(true);
     } catch (err) {
-      console.error("Microphone access denied or error:", err);
-      alert("Microphone access is required for recording.");
+      alert("Microphone permission denied or not available.");
+      console.error(err);
     }
   };
 
-  const stopRecording = () => {
-    mediaRecorderRef.current.stop();
+  const stopRecording = async () => {
     setIsRecording(false);
+
+    const audioContext = audioContextRef.current;
+    const buffers = buffersRef.current;
+
+    // Disconnect audio graph
+    processorRef.current?.disconnect();
+    sourceNodeRef.current?.disconnect();
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+    // Merge audio buffers
+    const totalLength = buffers.reduce((acc, cur) => acc + cur.length, 0);
+    const mergedBuffer = new Float32Array(totalLength);
+    let offset = 0;
+    for (const b of buffers) {
+      mergedBuffer.set(b, offset);
+      offset += b.length;
+    }
+
+    console.log("Merged buffer length:", mergedBuffer.length);
+
+    // Encode as WAV
+    const wavData = await wavEncoder.encode({
+      sampleRate: audioContext.sampleRate,
+      channelData: [mergedBuffer],
+    });
+
+    const blob = new Blob([wavData], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    setAudioUrl(url);
   };
 
   return (
-    <main style={{ padding: 40, fontFamily: 'Arial, sans-serif' }}>
-      <h1>🎤 Voice Recorder</h1>
-      <p>Test voice recording from browser (iPhone/Android supported)</p>
-      <button onClick={isRecording ? stopRecording : startRecording} style={{ padding: '10px 20px', fontSize: 16 }}>
-        {isRecording ? 'Stop Recording' : 'Start Recording'}
+    <div style={{ padding: 20 }}>
+      <h1>🎤 Voice Recorder (iOS Compatible)</h1>
+      <p>Test voice recording from your browser (iPhone/Android supported)</p>
+      <button onClick={isRecording ? stopRecording : startRecording}>
+        {isRecording ? "Stop Recording" : "Start Recording"}
       </button>
 
-      {audioURL && (
-        <div style={{ marginTop: 30 }}>
+      {audioUrl && (
+        <div style={{ marginTop: 20 }}>
           <h3>Recorded Audio:</h3>
-          <audio src={audioURL} controls />
+          <audio controls src={audioUrl}></audio>
         </div>
       )}
-    </main>
+    </div>
   );
 }
