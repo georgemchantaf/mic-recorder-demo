@@ -11,6 +11,8 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [soapNote, setSoapNote] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingTranscript, setLoadingTranscript] = useState(false);
+  const [loadingSoap, setLoadingSoap] = useState(false);
   const [error, setError] = useState(null);
 
   const audioContextRef = useRef(null);
@@ -78,7 +80,7 @@ export default function Home() {
 
     // Transcription
     try {
-      setLoading(true);
+      setLoadingTranscript(true);
       const file = new File([blob], "recording.wav", { type: "audio/wav" });
       const resp = await client.audio.transcriptions.create({
         model: "whisper-1",
@@ -90,13 +92,13 @@ export default function Home() {
       setError("Transcription failed");
       console.error(e);
     } finally {
-      setLoading(false);
+      setLoadingTranscript(false);
     }
   };
 
   const generateSoap = async () => {
     try {
-      setLoading(true);
+      setLoadingSoap(true);
       const prompt = `You are a medical documentation assistant in STRICT SCRIBE MODE.
 
 - Generate a SOAP note based only on this transcript.
@@ -138,7 +140,8 @@ Transcript:
       setError("SOAP generation failed");
       console.error(e);
     } finally {
-      setLoading(false);
+      setLoadingSoap(false);
+
     }
   };
 
@@ -194,10 +197,16 @@ Transcript:
         value={transcript}
         onChange={(e) => setTranscript(e.target.value)}
       />
+      {loadingTranscript && (
+        <p style={{ color: "#555", marginTop: 10 }}>⏳ Transcribing...</p>
+      )}
 
       <button style={{ marginTop: 10 }} onClick={generateSoap} disabled={loading || !transcript}>
         Generate SOAP Note
       </button>
+      {loadingSoap && (
+        <p style={{ color: "#555", marginTop: 10 }}>🧠 Generating SOAP Note...</p>
+      )}
 
       {soapNote && (
         <div style={{ marginTop: 20 }}>
