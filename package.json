@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "formidable": "^3.5.4",
     "next": "15.3.2",
+    "openai": "^4.98.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recorder-js": "^1.0.7",
